@@ -4,6 +4,7 @@ class GraphqlController < ApplicationController
   skip_before_action :verify_authenticity_token
   #before_action :doorkeeper_authorize!
   before_action :set_host_for_local_storage
+  before_action :set_locale
 
   def execute
     variables = ensure_hash(params[:variables])
@@ -13,9 +14,7 @@ class GraphqlController < ApplicationController
     context = {
       # Query context goes here, for example:
       current_user: current_user,
-      authorize: lambda{|mode, object| authorize!(mode, object) },
-      can: lambda{| mode, object | can?( mode, object) },
-      doorkeeper_authorize: lambda{doorkeeper_authorize! },
+      doorkeeper_authorize: lambda{ api_authorize! },
     }
 
     result = ChaskiqSchema.execute(query,
@@ -24,40 +23,61 @@ class GraphqlController < ApplicationController
                                    operation_name: operation_name)
 
     render json: result
-  # rescue => e
-  #  raise e unless Rails.env.development?
-  #  handle_error_in_development e
-  # end
+    # rescue => e
+    #  raise e unless Rails.env.development?
+    #  handle_error_message e
+    # end
 
-  # rescue CanCan::AccessDenied => e
-  #  render json: {
-  #    errors: [{
-  #              message: e.message,
-  #              data: {}
-  #            }]
-  #  }, status: 200
-  rescue ActiveRecord::RecordNotFound => e
-    render json: {
-      errors: [{
-        message: 'Data not found',
-        data: {}
-      }]
-    }, status: 200
-  rescue ActiveRecord::RecordInvalid => e
-    error_messages = e.record.errors.full_messages.join("\n")
-    json_error e.record
-    # GraphQL::ExecutionError.new "Validation failed: #{error_messages}."
-  rescue StandardError => e
-    # GraphQL::ExecutionError.new e.message
-    # raise e unless Rails.env.development?
-    handle_error_in_development e
-  rescue StandardError => e
-    raise e unless Rails.env.development?
+    # rescue CanCan::AccessDenied => e
+    #  render json: {
+    #    errors: [{
+    #              message: e.message,
+    #              data: {}
+    #            }]
+    #  }, status: 200
 
-    handle_error_in_development e
-  end
+    rescue OauthExeption => e
+      render json: { 
+        error: { 
+          message: "token not valid", 
+        }, data: {} 
+      }, status: 401
+    rescue ActiveRecord::RecordNotFound => e
+      render json: {
+        errors: [{
+          message: 'Data not found',
+          data: {}
+        }]
+      }, status: 200
+    rescue ActiveRecord::RecordInvalid => e
+      error_messages = e.record.errors.full_messages.join("\n")
+      json_error e.record
+      # GraphQL::ExecutionError.new "Validation failed: #{error_messages}."
+    rescue StandardError => e
+      # GraphQL::ExecutionError.new e.message
+      # raise e unless Rails.env.development?
+      handle_error_message e
+    rescue ActionPolicy::Unauthorized => exp
+      raise GraphQL::ExecutionError.new(
+        # use result.message (backed by i18n) as an error message
+        exp.result.message,
+        # use GraphQL error extensions to provide more context
+        extensions: {
+          code: :unauthorized,
+          fullMessages: exp.result.reasons.full_messages,
+          details: exp.result.reasons.details
+        }
+      )
+    end
 
   private
+
+  def api_authorize!
+    resource = current_resource_owner 
+    raise OauthExeption.new( "Message, message, message", "Yup") unless resource 
+    #doorkeeper_authorize!
+    resource
+  end
 
   def set_host_for_local_storage
     if Rails.application.config.active_storage.service == :local
@@ -83,10 +103,21 @@ class GraphqlController < ApplicationController
     end
   end
 
-  def handle_error_in_development(e)
+  def handle_error_message(e)
     logger.error e.message
     logger.error e.backtrace.join("\n")
 
-    render json: { error: { message: e.message, backtrace: e.backtrace }, data: {} }, status: 500
+    render json: { error: { 
+        message: e.message, 
+        backtrace: Rails.env.production? ? nil : e.backtrace 
+      }, data: {} 
+    }, status: 500
+  end
+end
+
+class OauthExeption < StandardError
+  def initialize(msg="This is a custom exception", exception_type="custom")
+    @exception_type = exception_type
+    super(msg)
   end
 end

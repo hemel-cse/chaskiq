@@ -1,11 +1,11 @@
 import React, { Component, Fragment } from "react";
-import ReactDOM from "react-dom";
 import { ThemeProvider } from 'emotion-theming'
 import sanitizeHtml from 'sanitize-html';
 import theme from './textEditor/theme'
 import themeDark from './textEditor/darkTheme'
 import DraftRenderer from './textEditor/draftRenderer'
 import DanteContainer from './textEditor/editorStyles'
+import styled from '@emotion/styled'
 import Moment from 'react-moment';
 import serialize from 'form-serialize'
 import UnicornEditor from './textEditor'
@@ -32,8 +32,16 @@ import {
   MessageSpinner,
   AppPackageBlockContainer,
   ConversationEventContainer,
-  InlineConversationWrapper
+  InlineConversationWrapper,
+  FooterAckInline
 } from './styles/styled'
+
+const DanteStylesExtend  = styled(DanteContainer)`
+.graf--code{
+  width: 242px;
+  overflow: auto
+}
+`
 
 export class Conversations extends Component {
 
@@ -136,9 +144,11 @@ export class Conversation extends Component {
       {
         translateY: 0 , 
         opacity: 1, 
-        height: '0' 
+        height: '0' ,
       }
     )
+
+    this.wait_for_input = null
 
     this.inlineIframe = null
   }
@@ -182,7 +192,7 @@ export class Conversation extends Component {
     return <MessageItemWrapper
             visible={this.props.visible}
             email={this.props.email}
-            key={`conversation-item-${o.id}`}
+            key={`conversation-${this.props.conversation.key}-item-${o.id}`}
             conversation={this.props.conversation}
             pushEvent={this.props.pushEvent}
             data={o}>
@@ -214,9 +224,8 @@ export class Conversation extends Component {
                 
                 <ThemeProvider 
                   theme={ themeforMessage }>
-                  <DanteContainer>
+                  <DanteStylesExtend>
                     <DraftRenderer 
-                      key={i}
                       message={o}
                       domain={this.props.domain}
                       raw={JSON.parse(o.message.serializedContent)}
@@ -230,7 +239,7 @@ export class Conversation extends Component {
                           </Moment> : <span>{t("not_seen")}</span>
                       }
                     </span>
-                  </DanteContainer>
+                  </DanteStylesExtend>
                 </ThemeProvider>  
 
               </div>
@@ -250,6 +259,7 @@ export class Conversation extends Component {
                clickHandler={this.appPackageClickHandler.bind(this)}
                appPackageSubmitHandler={this.appPackageSubmitHandler.bind(this)}
                t={this.props.t}
+               searcheableFields={this.props.appData.searcheableFields}
                {...o}
               />
   }
@@ -326,6 +336,7 @@ export class Conversation extends Component {
     
     const message = messages[0].message
     if(isEmpty(message.blocks)) return true
+    if(message.blocks && message.blocks.type === "wait_for_reply") return true
     return message.state === "replied"
   }
   
@@ -364,6 +375,17 @@ export class Conversation extends Component {
     }
 
     {
+      this.isInputEnabled() && this.props.conversation.messages && 
+      this.props.conversation.messages.collection.length >= 3 &&
+      <FooterAckInline>
+        <a href="https://chaskiq.io" target="blank"> 
+          <img src={`${this.props.domain}/logo-gray.png`}/> {this.props.t('runon')}
+        </a>
+      </FooterAckInline>
+    }
+
+
+    {
       this.props.conversation.messages && this.props.conversation.messages.collection.map((o, i) => {
           if(o.message.blocks) return this.renderItemPackage(o, i)
           if(o.message.action) return this.renderEventBlock(o, i)
@@ -379,6 +401,35 @@ export class Conversation extends Component {
     return this.props.t("reply_above")
   }
 
+  handleBeforeSubmit = ()=>{
+    const { messages } = this.props.conversation
+    if(isEmpty(messages)) return
+    const message = messages.collection[0]
+    if(!message) return
+    if(!message.message) return
+    if(message.message.blocks && message.message.blocks.type === 'wait_for_reply') {
+      this.wait_for_input = message
+    }
+  }
+
+  handleSent = ()=>{
+
+    if (!this.wait_for_input) return
+  
+    const message = this.wait_for_input
+
+    this.props.pushEvent("receive_conversation_part", 
+    {
+      conversation_id: this.props.conversation.key,
+      message_id: message.id,
+      step: message.stepId,
+      trigger: message.triggerId,
+      //submit: data
+    })
+
+    this.wait_for_input = null
+  }
+
   renderFooter = ()=>{
     return <Footer 
             isInline={this.props.inline_conversation}
@@ -389,6 +440,8 @@ export class Conversation extends Component {
               this.renderReplyAbove() : 
               <UnicornEditor
                 t={this.props.t}
+                beforeSubmit={(data)=>this.handleBeforeSubmit(data)}
+                onSent={(data)=>this.handleSent(data)}
                 domain={this.props.domain}
                 footerClassName={this.props.footerClassName }
                 insertComment={this.props.insertComment}
@@ -480,7 +533,13 @@ class AppPackageBlock extends Component {
   form = null
 
   state = {
-    value: null
+    value: null,
+    errors: {},
+    loading: false
+  }
+
+  setLoading = (val)=>{
+    this.setState({loading: val})
   }
 
   renderElements = ()=>{
@@ -500,10 +559,39 @@ class AppPackageBlock extends Component {
   }
 
   sendAppPackageSubmit = (e)=>{
+
+    if(this.state.loading) return
+
+    this.setLoading(true)
+
     e.preventDefault()
+
     const data = serialize(e.currentTarget, { hash: true, empty: true })
- 
-    this.props.appPackageSubmitHandler(data, this.props)
+    let errors = {}
+
+    // check custom functions and validate 
+    Object.keys(data).map((o)=> { 
+      const item = this.props.searcheableFields.find((f)=> f.name === o )
+      if (!item) return
+      if (!item.validation) return
+
+      var args = [ 'value', item.validation ];
+      var validationFunc = Function.apply(null, args);
+      const err = validationFunc(data[o])
+      if(!err) return
+      if (err.length === 0) return
+      errors = Object.assign(
+        errors, {[o]: err })
+    })
+
+
+    this.setState({ errors: errors, loading: false }, ()=> {
+      // console.log(this.state.errors)
+      // console.log(isEmpty(this.state.errors) ? 'valid' : 'errors')
+      if(!isEmpty(this.state.errors)) return
+      this.props.appPackageSubmitHandler(data, this.props)
+    })
+
   }
 
   renderEmptyItem = ()=>{
@@ -553,7 +641,7 @@ class AppPackageBlock extends Component {
 
         if (this.props.message.blocks.type === "data_retrieval"){
           return Object.keys(this.props.message.data).map((k)=>{
-            return <p>{k}: {this.props.message.data[k]}</p>
+            return <p key={`data-retrieval-${k}`}>{k}: {this.props.message.data[k]}</p>
           })
         } else{
           <p>{JSON.stringify(this.props.message.data)}</p>
@@ -563,56 +651,75 @@ class AppPackageBlock extends Component {
 
   renderElement = (item, index)=>{
     const element = item.element
-    const isDisabled = this.props.message.state === "replied"
+    const isDisabled = this.props.message.state === "replied" || this.state.loading
     const {t} = this.props
+    const key = `${item.type}-${index}`
     switch(item.element){
-    case "separator":
-      return <hr key={index}/>
-    case "input":
-      return <div className={"form-group"} key={index}>
-              <label>{t("enter_your", {field: item.name })}</label>
-              <input 
-                disabled={isDisabled}
-                type={item.type} 
-                name={item.name}
-                placeholder={t("enter_your", {field: item.name })}
-                //onKeyDown={(e)=>{ e.keyCode === 13 ? 
-                //  this.handleStepControlClick(item) : null
-                //}}
-              />
-              <button disabled={isDisabled}
-                      key={index} 
-                      style={{alignSelf: 'flex-end'}} 
-                      type={"submit"}>
-                {t("submit")}
-              </button>
-             </div>
-
-    case "submit":
-      return <button disabled={isDisabled}
-                     key={index} 
-                     style={{alignSelf: 'flex-end'}} 
-                     type={"submit"}>
-          {t("submit")}
-        </button>
-    case "button":
-      return <div>
-                <button 
-                disabled={isDisabled}
-                onClick={()=> this.handleStepControlClick(item)}
-                key={index} 
-                type={"button"}>
-                {item.label}
+      case "separator":
+        return <hr key={key}/>
+      case "input":
+        const isEmailType = item.name === "email" ? "email" : null
+        const errorClass = this.state.errors[item.name] ? 'error' : ''
+        return <div className={`form-group ${errorClass}`} 
+                key={key}>
+                <label>
+                  {t("enter_your", {field: item.name })}
+                </label>
+                <input 
+                  disabled={isDisabled}
+                  type={isEmailType || item.type} 
+                  name={item.name}
+                  required
+                  placeholder={t("enter_your", {field: item.name })}
+                  //onKeyDown={(e)=>{ e.keyCode === 13 ? 
+                  //  this.handleStepControlClick(item) : null
+                  //}}
+                />
+                {
+                  this.state.errors[item.name] && 
+                  <span className="errors">
+                    {t('invalid', { name: item.name} )}
+                  </span>
+                }
+                <button disabled={isDisabled}
+                        key={key} 
+                        style={{alignSelf: 'flex-end'}} 
+                        type={"submit"}>
+                  {t("submit")}
                 </button>
               </div>
-    default:
-      return null
+
+      case "submit":
+        return <button disabled={isDisabled}
+                       key={key} 
+                       style={{alignSelf: 'flex-end'}} 
+                       type={"submit"}>
+            {t("submit")}
+          </button>
+      case "button":
+        return <div>
+                  <button 
+                    disabled={isDisabled}
+                    onClick={()=> this.handleStepControlClick(item)}
+                    key={key} 
+                    type={"button"}>
+                    {item.label}
+                  </button>
+                </div>
+      default:
+        return null
     }
+  }
+
+  isHidden=()=>{
+    // will hide this kind of message since is only a placeholder from bot
+    return this.props.message.blocks.type === 'wait_for_reply'
   }
 
   render(){
     return <AppPackageBlockContainer                 
-              isInline={this.props.isInline}>
+              isInline={this.props.isInline}
+              isHidden={this.isHidden()}>
               {
                 true ? //!this.state.done ?
                 <form ref={o => this.form } 
@@ -653,6 +760,10 @@ export function CommentsItemComp(props){
     switch (message.message.blocks.type) {
       case 'app_package':
         return <span>{message.message.blocks.app_package}</span>
+      case 'ask_option':
+        return t(`conversations.message_blocks.ask_option`)
+      case 'data_retrieval':
+        return t(`conversations.message_blocks.data_retrieval`)
       default:
         return message.message.blocks.type
     }

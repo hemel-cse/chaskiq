@@ -10,8 +10,7 @@ import theme from './textEditor/theme'
 import DraftRenderer from './textEditor/draftRenderer'
 import DanteContainer from './textEditor/editorStyles'
 import Tour from './UserTour'
-//import gravatar from "./shared/gravatar"
-import { soundManager } from 'soundmanager2'
+import TourManager from './tourManager'
 import {toCamelCase} from './shared/caseConverter'
 import UrlPattern from 'url-pattern'
 import { withTranslation } from 'react-i18next';
@@ -47,10 +46,10 @@ import {
   ShowMoreWrapper,
   AssigneeStatus,
   Overflow,
-  AssigneeStatusWrapper
+  AssigneeStatusWrapper,
+  FooterAck
 } from './styles/styled'
 
-import TourManager from './tourManager'
 import {
   CloseIcon,
   LeftIcon,
@@ -63,6 +62,9 @@ import Home from './homePanel'
 import Article from './articles'
 
 import {Conversation, Conversations} from './conversation.js'
+import {RtcView} from '../src/components/rtc'
+
+import RtcViewWrapper, {CallStatus} from './rtcView'
 
 let App = {}
 
@@ -102,7 +104,11 @@ class Messenger extends Component {
         translateY: -25,
         height: 212
       },
-      transition: 'in'
+      transition: 'in',
+      rtc: {  },
+      videoSession: false,
+      rtcAudio: true,
+      rtcVideo: true
     }
 
     this.delayTimer = null
@@ -146,12 +152,6 @@ class Messenger extends Component {
       /* other custom settings */
     });
 
-    //this.graphqlClient = this.props.graphqlClient
-    /*new GraphqlClient({
-      config: this.defaultHeaders,
-      baseURL: '/api/graphql'
-    })*/
-
     this.graphqlClient = new GraphqlClient({
       config: this.defaultHeaders,
       baseURL: `${this.props.domain}/api/graphql`
@@ -176,11 +176,16 @@ class Messenger extends Component {
           break;
         case "convert":
           this.convertVisitor(data)
+          break;
+        case "trigger":
+          this.requestTrigger(data)
+          break;
         default:
           break;
       } 
     });
 
+    this.pling = new Audio(`${this.props.domain}/sounds/pling.mp3`)
   }
 
   componentDidMount(){
@@ -209,9 +214,11 @@ class Messenger extends Component {
           ev: e
         })
       }
-    } , false);
+    }, false);
 
-    window.opener && window.opener.postMessage({type: "ENABLE_MANAGER_TOUR"}, "*");
+    window.opener && window.opener.postMessage(
+      {type: "ENABLE_MANAGER_TOUR"}, "*"
+    );
   }
 
   componentDidUpdate(prevProps, prevState){
@@ -219,6 +226,10 @@ class Messenger extends Component {
 
   componentWillUnmount() {
     window.removeEventListener("resize", this.updateDimensions);
+  }
+
+  setVideoSession(){
+    this.setState({videoSession: !this.state.videoSession})
   }
 
   visibility(){
@@ -309,28 +320,29 @@ class Messenger extends Component {
   }
 
   playSound = () => {
-    soundManager.createSound({
-      id: 'mySound',
-      url: `${this.props.domain}/sounds/pling.mp3`,
-      autoLoad: true,
-      autoPlay: false,
-      //onload: function () {
-      //  alert('The sound ' + this.id + ' loaded!');
-      //},
-      volume: 50
-    }).play()
+    this.pling.volume = 0.4
+    this.pling.play()
+  }
+
+  updateRtcEvents = (data)=>{
+    const conversation = this.state.conversation
+    if (conversation && conversation.key === data.conversation_id ) { 
+      //console.log("update rtc dsta", data)
+      this.setState({rtc: data})
+    }
   }
 
   eventsSubscriber = ()=>{
-    App.events = App.cable.subscriptions.create(this.cableDataFor({channel: "MessengerEventsChannel"}),
+    App.events = App.cable.subscriptions.create(
+      this.cableDataFor({channel: "MessengerEventsChannel"}),
       {
         connected: ()=> {
-          console.log("connected to events")
+          //console.log("connected to events")
           this.registerVisit()
           //this.processTriggers()
         },
         disconnected: ()=> {
-          console.log("disconnected from events")
+          //console.log("disconnected from events")
         },
         received: (data)=> {
           switch (data.type) {
@@ -351,13 +363,14 @@ class Messenger extends Component {
               const newMessage = toCamelCase(data.data)
               this.receiveMessage(newMessage)
               break
-
             case "conversations:typing":
               this.handleTypingNotification(toCamelCase(data.data))
               break
             case "conversations:unreads":
               this.receiveUnread(data.data)
               break
+            case 'rtc_events':
+              return this.updateRtcEvents(data)
             case "true":
               return true
             default:
@@ -371,7 +384,7 @@ class Messenger extends Component {
           console.log(`notify event!!`)
         },
         handleMessage: (message)=>{
-          console.log(`handle event message`)
+          console.log(`handle event message`, message)
         }
       }
     )
@@ -478,7 +491,7 @@ class Messenger extends Component {
     App.precense = App.cable.subscriptions.create(this.cableDataFor({channel: "PresenceChannel"}),
     {
         connected: ()=> {
-          console.log("connected to presence")
+          //console.log("connected to presence")
         },
         disconnected: ()=> {
           console.log("disconnected from presence")
@@ -775,10 +788,12 @@ class Messenger extends Component {
   }
 
   displayConversation =(e, o)=>{
-    this.setConversation(o.key, () => {
-      this.setTransition('out', ()=>{
-        this.setDisplayMode('conversation', ()=>{
-          this.scrollToLastItem()
+    this.clearConversation(()=>{
+      this.setConversation(o.key, () => {
+        this.setTransition('out', ()=>{
+          this.setDisplayMode('conversation', ()=>{
+            this.scrollToLastItem()
+          })
         })
       })
     })
@@ -1008,6 +1023,10 @@ class Messenger extends Component {
     
   }
 
+  toggleAudio= ()=> this.setState({rtcAudio: !this.state.rtcAudio})
+
+  toggleVideo= ()=> this.setState({rtcVideo: !this.state.rtcVideo})
+
   render() {
     const palette = this.themePalette()
     return (
@@ -1016,9 +1035,7 @@ class Messenger extends Component {
           mode: 'light', // this.state.appData ? this.state.appData.theme : 
           isMessengerActive: this.isMessengerActive()
         }}>
-
             <EditorWrapper>
-
               {
                 this.state.availableMessages.length > 0 && this.isMessengerActive() &&
                 <MessageFrame 
@@ -1029,11 +1046,11 @@ class Messenger extends Component {
                   t={this.props.t}
                 />
               }
-                  
 
               {
                 this.state.open && this.isMessengerActive() ?
                   <Container 
+                    data-chaskiq-container='true'
                     open={this.state.open} 
                     isMobile={this.state.isMobile}>
                     
@@ -1045,7 +1062,21 @@ class Messenger extends Component {
                       }}>
 
                         <FrameBridge 
-                          handleAppPackageEvent={this.handleAppPackageEvent}>
+                          handleAppPackageEvent={this.handleAppPackageEvent}
+                          >
+
+                          { 
+                            this.state.display_mode === "conversation" ?
+                              <FrameChild 
+                                state={this.state} 
+                                props={this.props}
+                                events={App.events}
+                                updateRtc={(data)=> this.setState({rtc: data})}
+                                toggleAudio={ this.toggleAudio }
+                                toggleVideo={ this.toggleVideo }
+                                setVideoSession={this.setVideoSession.bind(this)} 
+                              /> : <div></div>
+                          }
 
                           <SuperFragment>
 
@@ -1101,7 +1132,7 @@ class Messenger extends Component {
                                     {
                                       this.state.appData.logo && 
                                         <img style={{height: 50, width: 50}} 
-                                          src={this.props.domain + this.state.appData.logo}
+                                          src={this.state.appData.logo}
                                         />
                                     }
                                     <h2 className={'title'}>
@@ -1127,24 +1158,33 @@ class Messenger extends Component {
                             <Body>
 
                               {
-                                this.state.display_mode === "home" && 
-                                <Home 
-                                  newMessages={this.state.new_messages}
-                                  graphqlClient={this.graphqlClient}
-                                  displayNewConversation={this.displayNewConversation}
-                                  viewConversations={this.displayConversationList}
-                                  updateHeader={this.updateHeader}
-                                  transition={this.state.transition}
-                                  displayArticle={this.displayArticle}
-                                  appData={this.state.appData}
-                                  agents={this.state.agents}
-                                  displayConversation={this.displayConversation}
-                                  conversations={this.state.conversations}
-                                  getConversations={this.getConversations}
-                                  {...this.props}
-                                  t={this.props.t}
-                                />
+                                this.state.display_mode === "home" &&
+                                <React.Fragment> 
+                                  <Home 
+                                    newMessages={this.state.new_messages}
+                                    graphqlClient={this.graphqlClient}
+                                    displayNewConversation={this.displayNewConversation}
+                                    viewConversations={this.displayConversationList}
+                                    updateHeader={this.updateHeader}
+                                    transition={this.state.transition}
+                                    displayArticle={this.displayArticle}
+                                    appData={this.state.appData}
+                                    agents={this.state.agents}
+                                    displayConversation={this.displayConversation}
+                                    conversations={this.state.conversations}
+                                    getConversations={this.getConversations}
+                                    {...this.props}
+                                    t={this.props.t}
+                                  />
+                                  <FooterAck>
+                                  <a href="https://chaskiq.io" target="blank"> 
+                                    <img src={`${this.props.domain}/logo-gray.png`}/>
+                                    {this.props.t('runon')}
+                                  </a>
+                                  </FooterAck>
+                                </React.Fragment>
                               }
+
 
                               {
                                 this.state.display_mode === "article" &&
@@ -1161,10 +1201,11 @@ class Messenger extends Component {
                                 />
                               }
 
-                              {
+                              { 
                                 this.state.display_mode === "conversation" &&
                                 
                                   <Conversation
+                                    appData={this.state.appData}
                                     visible={this.state.visible}
                                     clearConversation={this.clearConversation}
                                     isMobile={this.state.isMobile}
@@ -1184,6 +1225,17 @@ class Messenger extends Component {
                                   /> 
                               } 
 
+                              {
+                                <RtcViewWrapper 
+                                  toggleVideo={this.toggleVideo}
+                                  toggleAudio={this.toggleAudio}
+                                  rtcVideo={this.state.rtcVideo}
+                                  rtcAudio={this.state.rtcAudio}
+                                  setVideoSession={this.setVideoSession.bind(this)}
+                                  videoSession={this.state.videoSession}>
+                                </RtcViewWrapper>
+                              }
+                              
                               {
                                 this.state.display_mode === "conversations" && 
                                   <Conversations 
@@ -1266,6 +1318,7 @@ class Messenger extends Component {
                     }
 
                     <Conversation
+                      appData={this.state.appData}
                       //disablePagination={true}
                       visible={this.state.visible}
                       pushEvent={this.pushEvent}
@@ -1296,16 +1349,17 @@ class Messenger extends Component {
                 </StyledFrame>
               }
 
-
               { 
                 this.isMessengerActive() ?
-                <StyledFrame style={{
-                    zIndex: '10000000',
+                <StyledFrame
+                  id='chaskiqPrime' 
+                  style={{
+                    zIndex: '10000',
                     position: 'absolute',
                     bottom: '-18px',
                     width: '88px',
                     height: '100px',
-                    right: '-13px',
+                    right: '0px',
                     border: 'none'
                   }}>
 
@@ -1358,7 +1412,6 @@ class Messenger extends Component {
 
             </EditorWrapper>
 
-
             {
               this.state.tourManagerEnabled ?
               <TourManager 
@@ -1372,13 +1425,48 @@ class Messenger extends Component {
                   events={App.events}
                   domain={this.props.domain}
                 /> : null
-            }
+              }
 
             <div id="TourManager"></div>
-         
+          
         </ThemeProvider>
     );
   }
+}
+
+const FrameChild = ({ 
+  document, window, state, 
+  props, events, updateRtc, setVideoSession, 
+  toggleAudio, toggleVideo 
+}) => {
+  return <React.Fragment>
+    { 
+      <RtcView 
+        document={document}
+        buttonElement={'callButton'}
+        infoElement={'info'}
+        localVideoElement={'localVideo'}
+        remoteVideoElement={'remoteVideo'}
+        callStatusElement={'callStatus'}
+        callButtonsElement={'callButtons'}
+        current_user={{ email: props.session_id }}
+        rtc={state.rtc}
+        handleRTCMessage={( data ) => { debugger }}
+        toggleAudio={toggleAudio}
+        toggleVideo={toggleVideo}
+        rtcAudio={state.rtcAudio}
+        rtcVideo={state.rtcVideo}
+        onCloseSession={()=> {
+          updateRtc({})
+        } }
+        toggleVideoSession={ () => setVideoSession(!state.videoSession)}
+        video={state.videoSession}
+        events={events}
+        AppKey={props.app_id}
+        conversation={state.conversation}
+      /> 
+    }
+  </React.Fragment>
 }
 
 // frame internals grab
@@ -1392,8 +1480,17 @@ class FrameBridge extends Component {
   }
   
   render(){
+    const {props} = this
+
+    const children = React.Children.map(this.props.children, (child, index) => {
+      return React.cloneElement(child, {
+        window: props.window, 
+        document: props.document
+      });
+    })
+
     return <React.Fragment>
-            {this.props.children}
+            {children}
            </React.Fragment>
   }
 }
@@ -1404,7 +1501,7 @@ class AppBlockPackageFrame extends Component {
   }
 
   render(){
-    console.log("PACK", this.props)
+    //console.log("PACK", this.props)
     const blocks = toCamelCase(this.props.appBlock.message.message.blocks)
     const conversation = this.props.appBlock.message.conversation
     const mainParticipant = conversation.mainParticipant

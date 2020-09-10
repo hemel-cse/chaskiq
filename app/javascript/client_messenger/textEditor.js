@@ -1,7 +1,7 @@
 
 import React, { Component } from 'react';
 import styled from "@emotion/styled"
-import { Picker } from 'emoji-mart'
+import { Picker } from 'mr-emoji'
 import {EmojiBlock} from "./styles/emojimart"
 
 //import EmojiPicker from 'emoji-picker-react';
@@ -230,11 +230,8 @@ export default class UnicornEditor extends Component {
     })
 
     const contentState = customHTML2Content(sampleMarkup, this.extendedBlockRenderMap) 
-    
-
     const fstate2 = EditorState.createWithContent(contentState)
     return JSON.stringify(convertToRaw(fstate2.getCurrentContent()))
-
   }
 
   //https://stackoverflow.com/questions/11076975/insert-text-into-textarea-at-cursor-position-javascript
@@ -268,32 +265,57 @@ export default class UnicornEditor extends Component {
     e.preventDefault()
     
     if(this.input.value === "") return
-
-    this.props.insertComment({
+    const opts = {
       html_content: this.input.value,
       serialized_content: this.convertToDraft(this.input.value)
-    }, {
+    }
+
+    this.props.insertComment(opts, {
       before: ()=>{
+        this.props.beforeSubmit && this.props.beforeSubmit(opts)
         this.input.value = ""
       },
       sent: () => {
+        this.props.onSent && this.props.onSent(opts)
         this.input.value = ""
       },
     })
   }
 
   submitImage = (link, cb)=>{
-    const html = `<img width=100% src="${link}"/>`
-    this.props.insertComment(
-        {
-          html_content: html,
-          serialized_content: this.convertToDraft(html)
-        }
-      , {
+    const html = `<img width=100% src="${link}" data-type="image"/>`
+    const opts = {
+      html_content: html,
+      serialized_content: this.convertToDraft(html)
+    }
+    this.props.insertComment(opts, 
+      {
         before: ()=>{
+          this.props.beforeSubmit && this.props.beforeSubmit(opts)
           this.input.value = ""
         },
         sent: () => {
+          this.props.onSent && this.props.onSent(opts)
+          this.input.value = ""
+          cb && cb()
+        },
+      })
+  }
+
+  submitFile = (attrs, cb)=>{
+    const html = `<img src="${attrs.link}" data-filename="${attrs.filename}" data-type="file" data-content-type="${attrs.content_type}"/>`
+    const opts = {
+      html_content: html,
+      serialized_content: this.convertToDraft(html)
+    }
+    this.props.insertComment(opts, 
+      {
+        before: ()=>{
+          this.props.beforeSubmit && this.props.beforeSubmit(opts)
+          this.input.value = ""
+        },
+        sent: () => {
+          this.props.onSent && this.props.onSent(opts)
           this.input.value = ""
           cb && cb()
         }
@@ -326,9 +348,9 @@ export default class UnicornEditor extends Component {
     this.setState({ giphyEnabled: !this.state.giphyEnabled })
   }
 
-  handleEmojiInsert = (e)=>{
+  handleEmojiInsert = (emoji, e)=>{
     this.toggleEmoji()
-    this.insertAtCursor(e.native)
+    this.insertAtCursor(emoji.native)
   }
 
   handleUpload = (ev)=>{
@@ -344,7 +366,11 @@ export default class UnicornEditor extends Component {
           console.log(err)
         },
         onSuccess: (attrs)=> {
-          this.submitImage(attrs.link)
+          if( attrs.content_type.match(/image\/(jpg|png|jpeg|gif)/) ){
+            this.submitImage(attrs.link)
+          } else {
+            this.submitFile(attrs)
+          }
           this.setLock(false)
         }
       },
@@ -371,6 +397,7 @@ export default class UnicornEditor extends Component {
   }
 
   render() {
+    const permittedFiles = "text/plain, text/markdown, text/x-markdown, image/jpg, image/gif, image/jpeg, image/png, application/pdf, application/csv, application/xls, application/xlsx"
     return (
 
       <EditorWrapper onClick={this.handleFocus}>
@@ -379,11 +406,11 @@ export default class UnicornEditor extends Component {
           { 
             this.state.emojiEnabled && 
               <EmojiBlock>
-                <Picker set='emojione'
+                <Picker set='apple'
                   emojiSize={20}
                   emoji='' 
                   title="hey"
-                  onSelect={this.handleEmojiInsert} />
+                  onClick={this.handleEmojiInsert} />
               </EmojiBlock> 
           }
 
@@ -394,8 +421,6 @@ export default class UnicornEditor extends Component {
                 handleSelected={this.saveGif}
               /> : null
           }
-
-          
 
           <Input 
             onKeyPress={this.handleReturn}
@@ -434,11 +459,11 @@ export default class UnicornEditor extends Component {
               <input 
                 type="file" 
                 ref="upload_input"
+                accept={permittedFiles}
                 style={{display: 'none'}} 
                 onChange={this.handleUpload}
               />
             </button>
-         
 
           </EditorButtons>
 

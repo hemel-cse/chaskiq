@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class ApplicationController < ActionController::Base
-  respond_to :json
+  respond_to :json, :html
   protect_from_forgery unless: -> { request.format.json? }
   # protect_from_forgery with: :null_session
 
@@ -16,10 +16,6 @@ class ApplicationController < ActionController::Base
 
   def dummy_webhook
     render status: 200, json: {ok: true}
-  end
-
-  def current_resource_owner
-    Agent.find(doorkeeper_token.resource_owner_id) if doorkeeper_token
   end
   
   def current_user
@@ -45,7 +41,47 @@ class ApplicationController < ActionController::Base
     render_empty
   end
 
+  # Devise code
+  before_action :configure_permitted_parameters, if: :devise_controller?
+
+  protected
+  
+  # Devise methods
+  # Authentication key(:username) and password field will be added automatically by devise.
+  def configure_permitted_parameters
+    added_attrs = [:email, :first_name, :last_name]
+    devise_parameter_sanitizer.permit :sign_up, keys: added_attrs
+    devise_parameter_sanitizer.permit :account_update, keys: added_attrs
+  end
+
+  def set_locale
+    http_locale = request.headers['HTTP_LANG']
+    http_splitted_locale = http_locale ? http_locale.to_s.split('-').first.to_sym : nil
+
+    locale = lang_available?(http_splitted_locale) ? 
+      http_splitted_locale : I18n.default_locale
+
+    I18n.locale = begin
+                    locale
+                  rescue StandardError
+                    I18n.default_locale
+                  end
+  end
+
   private
+
+  def lang_available?(lang)
+    return unless lang.present?
+    I18n.available_locales.include?(lang.to_sym)
+  end
+
+  def current_resource_owner
+    if doorkeeper_token && !doorkeeper_token.expired?
+      agent = Agent.find(doorkeeper_token.resource_owner_id) 
+      sign_in(agent, scope: "agent")
+      agent
+    end
+  end
 
   def cors_set_access_control_headers
     headers['Access-Control-Allow-Origin'] = '*'

@@ -14,7 +14,8 @@ module Types
     field :created_at, GraphQL::Types::ISO8601DateTime, null: true
     field :main_participant, Types::AppUserType, null: true
     field :last_message, Types::ConversationPartType, null: true
-
+    field :tag_list, [String], null: true
+    
     def last_message
       # TODO: we should use last_message_id relation to batch this properly
       object.latest_message
@@ -36,7 +37,7 @@ module Types
 
     field :messages, Types::PaginatedConversationPartsType, null: true do
       argument :page, Integer, required: false, default_value: 1
-      argument :per, Integer, required: false, default_value: 5
+      argument :per, Integer, required: false, default_value: 7
     end
 
     def messages(per:, page:)

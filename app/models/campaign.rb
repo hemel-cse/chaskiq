@@ -9,28 +9,37 @@ class Campaign < Message
 
   def config_fields
     [
-      { name: 'name', type: 'string', grid: { xs: 12, sm: 12 } },
-      { name: 'subject', type: 'text', grid: { xs: 12, sm: 12 } },
-      { name: 'fromName', type: 'string', grid: { xs: 12, sm: 6 } },
-      { name: 'fromEmail', type: 'string', grid: { xs: 12, sm: 6 } },
-      { name: 'replyEmail', type: 'string', grid: { xs: 12, sm: 6 } },
-      { name: 'description', type: 'text', grid: { xs: 12, sm: 12 } },
+      { name: 'name', label: I18n.t("definitions.campaigns.campaign_name.label"),  hint: I18n.t("definitions.campaigns.campaign_name.hint"),  type: 'string', grid: { xs: 'w-full', sm: 'w-full' } },
+      { name: 'subject', label: I18n.t("definitions.campaigns.email_subject.label"), hint: I18n.t("definitions.campaigns.email_subject.hint"), type: 'text', grid: { xs: 'w-full', sm: 'w-full' } },
+      { name: 'fromName', label: I18n.t("definitions.campaigns.from_name.label"), type: 'string', grid: { xs: 'w-full', sm: 'w-1/2' } },
+      { name: 'fromEmail', label: I18n.t("definitions.campaigns.from_email.label"), type: 'string', grid: { xs: 'w-full', sm: 'w-1/2' } },
+      { name: 'replyEmail', label: I18n.t("definitions.campaigns.reply_email.label"), type: 'string', grid: { xs: 'w-full', sm: 'w-1/2' } },
+      { name: 'description', type: 'textarea', grid: { xs: 'w-full', sm: 'w-full' } },
       { name: 'timezone', type: 'timezone',
         options: ActiveSupport::TimeZone.all.map { |o| o.tzinfo.name },
         multiple: false,
-        grid: { xs: 12, sm: 12 } },
+        grid: { xs: 'w-full', sm: 'w-full' } },
       # {name: "settings", type: 'string'} ,
-      { name: 'scheduledAt', type: 'datetime', grid: { xs: 12, sm: 6 } },
-      { name: 'scheduledTo', type: 'datetime', grid: { xs: 12, sm: 6 } }
+      { name: 'scheduledAt', label: I18n.t("definitions.campaigns.scheduled_at.label"), type: 'datetime', grid: { xs: 'w-full', sm: 'w-1/2' } },
+      { name: 'scheduledTo', label: I18n.t("definitions.campaigns.scheduled_to.label"), type: 'datetime', grid: { xs: 'w-full', sm: 'w-1/2' } }
     ]
   end
 
   def stats_fields
+    colors = {
+      delivery: "#9ae6b4",
+      send: "#faf089",
+      click: "#d6bcfa",
+      open: "#90cdf4",
+      bounces: "#ccc"
+    }
+
     [
-      { name: 'DeliverRateCount', label: 'DeliverRateCount', keys: [{ name: 'send', color: '#444' }, { name: 'open', color: '#ccc' }] },
-      { name: 'ClickRateCount', label: 'ClickRateCount', keys: [{ name: 'send', color: '#444' }, { name: 'click', color: '#ccc' }] },
-      { name: 'BouncesRateCount', label: 'BouncesRateCount', keys: [{ name: 'send', color: '#444' }, { name: 'bounces', color: '#ccc' }] },
-      { name: 'ComplaintsRate', label: 'ComplaintsRate', keys: [{ name: 'send', color: '#444' }, { name: 'complaints', color: '#ccc' }] }
+      { name: 'DeliverRateCount', label: 'DeliverRateCount', keys: [{ name: 'send', color: colors[:send] }, { name: 'delivery', color: colors[:delivery] }] },
+      { name: 'BouncesRateCount', label: 'BouncesRateCount', keys: [{ name: 'send', color: colors[:send] }, { name: 'bounces', color: colors[:bounces] }] },
+      { name: 'DeliverRateCount', label: 'DeliverRateCount', keys: [{ name: 'delivery', color: colors[:delivery] }, { name: 'open', color: colors[:open] }] },
+      { name: 'ClickRateCount', label: 'ClickRateCount', keys: [{ name: 'open', color: colors[:open] }, { name: 'click', color: colors[:click] }] },
+      #{ name: 'ComplaintsRate', label: 'ComplaintsRate', keys: [{ name: 'send', color: '#444' }, { name: 'complaints', color: '#ccc' }] }
     ]
   end
 
@@ -79,7 +88,7 @@ class Campaign < Message
     self.css = template.css
   end
 
-  def mustache_template_for(subscriber)
+  def mustache_template_for(subscriber, html: nil)
     link_prefix = host + "/campaigns/#{id}/tracks/#{subscriber.encoded_id}/click?r="
 
     # html = LinkRenamer.convert(premailer, link_prefix)
@@ -87,7 +96,7 @@ class Campaign < Message
                                    .merge(attributes_for_template(subscriber))
                                    .merge(subscriber.properties)
 
-    compiled_premailer = premailer.gsub('%7B%7B', '{{').gsub('%7D%7D', '}}')
+    compiled_premailer = (html || premailer).gsub('%7B%7B', '{{').gsub('%7D%7D', '}}')
     Mustache.render(compiled_premailer, subscriber_options)
 
     # html = LinkRenamer.convert(compiled_mustache, link_prefix)
@@ -116,9 +125,17 @@ class Campaign < Message
   def clean_inline_css(url)
     html = open(url).readlines.join('')
     document = Roadie::Document.new html
-    document.transform
-    # premailer = Premailer.new(url, :adapter => :nokogiri, :escape_url_attributes => false)
-    # premailer.to_inline_css
+    new_html = document.transform
+
+    doc = Nokogiri::HTML(new_html)
+    # rename active sotrage url to absolute for email readers
+    doc.xpath("//img").each do |img|
+      image_url = "#{ENV['HOST']}#{img['src']}"
+      url = image_url.include?('rails/active_storage') ? image_url : img['src']
+      img['src'] = url
+    end
+
+    doc.to_html
   end
 
   def attributes_for_template(subscriber)
@@ -131,6 +148,18 @@ class Campaign < Message
       campaign_subscribe: "#{campaign_url}/subscribers/new",
       campaign_description: description.to_s,
       track_image_url: track_image }
+  end
+
+  def broadcast_event()
+    key = self.app.key
+    EventsChannel.broadcast_to(key, {
+      type: 'campaigns',
+      data: {
+        campaign: self.id,
+        state: "sent",
+        ts: Time.now.to_i
+      }
+    }.as_json)
   end
 
   def hidden_constraints

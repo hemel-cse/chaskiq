@@ -28,6 +28,8 @@ export const UPDATE_APP = `
         outgoingEmailDomain
         customizationColors
         customFields
+        tagList
+        subscriptionsEnabled
         segments {
           name
           id
@@ -44,22 +46,6 @@ export const DESTROY_APP = `
   mutation AppsUpdate($appKey: String!){
     appsDestroy(appKey: $appKey){
       errors
-      app{
-        encryptionKey
-        key
-        name
-        preferences
-        configFields
-        theme
-        activeMessenger
-        segments {
-          name
-          id
-          properties
-        }
-        state
-        tagline
-      }
     }
   }
 `;
@@ -88,6 +74,7 @@ export const CREATE_APP = `
         leadTasksSettings
         userTasksSettings
         customFields
+        subscriptionsEnabled
       }
     }
   }
@@ -124,6 +111,7 @@ export const APP_USER_UPDATE_STATE = `
         externalProfiles {
           id
           provider
+          profileId
           data
         }
       }
@@ -162,6 +150,7 @@ export const APP_USER_UPDATE = `
         externalProfiles {
           id
           provider
+          profileId
           data
         }
       }
@@ -200,6 +189,7 @@ export const SYNC_EXTERNAL_PROFILE = `
         externalProfiles {
           id
           provider
+          profileId
           data
         }
       }
@@ -227,6 +217,7 @@ export const START_CONVERSATION = `
           email
           properties
           avatarUrl
+          displayName
         }
 
         lastMessage{
@@ -251,8 +242,6 @@ export const START_CONVERSATION = `
             avatarUrl
           }
         }
-
-
       }
     }
   }
@@ -330,6 +319,20 @@ export const INSERT_APP_BLOCK_COMMMENT = `
   }
 `;
 
+export const SEND_TRIGGER = `
+  mutation SendTrigger($appKey: String!, $conversationId: Int!, $triggerId: Int!){
+    sendTrigger(appKey: $appKey, conversationId: $conversationId, triggerId: $triggerId){
+      conversation{
+        id
+        key
+        state 
+        readAt
+        priority
+      }
+    }
+  }
+`;
+
 export const INSERT_NOTE = `
   mutation InsertNote($appKey: String!, $id: Int!, $message: Json!){
     insertNote(appKey: $appKey, id: $id, message: $message){
@@ -381,6 +384,7 @@ export const ASSIGN_USER = `
           email
           properties
           avatarUrl
+          displayName
         }
       }
     }
@@ -455,6 +459,33 @@ export const DELETE_ASSIGNMENT_RULE = `
   }
 `;
 
+export const UPDATE_CONVERSATION_TAG_LIST = `
+  mutation UpdateConversationTags($appKey: String!, $conversationId: Int!, $tagList: [String!]!){
+    updateConversationTags(appKey: $appKey, conversationId: $conversationId, tagList: $tagList){
+      conversation{
+        id
+        state 
+        readAt
+        priority
+        tagList
+        assignee {
+          id
+          email
+          name
+          avatarUrl
+        }
+        mainParticipant{
+          id
+          email
+          properties
+          avatarUrl
+          displayName
+        }
+      }
+    }
+  }
+`;
+
 export const UPDATE_CONVERSATION_STATE = `
   mutation UpdateConversationState($appKey: String!, $conversationId: Int!, $state: String!){
     updateConversationState(appKey: $appKey, conversationId: $conversationId, state: $state){
@@ -474,6 +505,7 @@ export const UPDATE_CONVERSATION_STATE = `
           email
           properties
           avatarUrl
+          displayName
         }
       }
     }
@@ -499,6 +531,7 @@ export const TOGGLE_CONVERSATION_PRIORITY = `
           email
           properties
           avatarUrl
+          displayName
         }
       }
     }
@@ -736,6 +769,43 @@ export const WEBHOOK_UPDATE = `
   }
 `;
 
+export const QUICK_REPLY_CREATE = `
+  mutation QuickReplyCreate($appKey: String!, $title: String!, $content: String!, $lang: String){
+    createQuickReply(appKey: $appKey, title: $title, content: $content, lang: $lang){
+      quickReply {
+        id
+        title
+        content
+      }
+      errors
+    }
+  }
+`;
+
+export const QUICK_REPLY_UPDATE = `
+  mutation QuickReplyUpdate($appKey: String!, $title: String!, $content: String!, $id: Int!, $lang: String ){
+    updateQuickReply(appKey: $appKey, title: $title, content: $content, id: $id, lang: $lang ){
+      quickReply {
+        id
+        title
+        content
+      }
+      errors
+    }
+  }
+`;
+
+export const QUICK_REPLY_DELETE = `
+  mutation QuickReplyDelete($appKey: String!, $id: Int! ){
+    deleteQuickReply(appKey: $appKey, id: $id){
+      quickReply {
+        id
+      }
+      errors
+    }
+  }
+`;
+
 export const INVITE_AGENT = `
   mutation InviteAgent($appKey: String!, $email: String!){
     inviteAgent(appKey: $appKey, email: $email){
@@ -755,6 +825,20 @@ export const UPDATE_AGENT = `
         email
         avatarUrl
         name
+        lang
+      }
+    }
+  }
+`;
+
+export const UPDATE_AGENT_ROLE = `
+  mutation UpdateAgentRole($appKey: String!, $id: String!, $params: Json!){
+    updateAgentRole(appKey: $appKey, id: $id, params: $params){
+      agent {
+        email
+        avatarUrl
+        name
+        lang
       }
     }
   }
@@ -1169,7 +1253,7 @@ export const UPDATE_BOT_TASK = `
 `;
 
 export const DELETE_BOT_TASK = `
-  mutation DeleteBotTask($appKey: String!, $id: Int!){
+  mutation DeleteBotTask($appKey: String!, $id: String!){
     deleteBotTask( 
       appKey: $appKey,
       id: $id
@@ -1182,6 +1266,58 @@ export const DELETE_BOT_TASK = `
   }
 `;
 
+
+export const CREATE_OAUTH_APP = `
+  mutation CreateOauthApplication($appKey: String!, $params: Json!){
+    createOauthApplication( 
+      appKey: $appKey,
+      params: $params,
+    ){
+      oauthApplication{
+        name
+        redirectUri
+        secret
+        uid
+      }
+      errors
+    }
+  }
+`;
+
+export const UPDATE_OAUTH_APP = `
+  mutation UpdateOauthApplication($appKey: String!, $uid: String!, $params: Json!){
+    updateOauthApplication( 
+      appKey: $appKey,
+      params: $params,
+      uid: $uid
+    ){
+      oauthApplication{
+        name
+        redirectUri
+        secret
+        uid
+      }
+      errors
+    }
+  }
+`;
+
+export const DELETE_OAUTH_APP = `
+  mutation DeleteOauthApplication($appKey: String!, $uid: String!){
+    deleteOauthApplication( 
+      appKey: $appKey,
+      uid: $uid
+    ){
+      oauthApplication{
+        name
+        redirectUri
+        secret
+        uid
+      }
+      errors
+    }
+  }
+`;
 
 
 
@@ -1197,6 +1333,7 @@ export const CREATE_INTEGRATION = `
         icon
         state
         description
+        hookUrl
       }
     }
   }

@@ -17,15 +17,17 @@ const actionTypes = {
   GetConversations: 'GET_CONVERSATIONS',
   UpdateConversations: 'UPDATE_CONVERSATIONS',
   ClearConversations: 'CLEAR_CONVERSATIONS',
-  
-  UpdateConversation: 'UPDATE_CONVERSATION',
 
+  UpdateConversation: 'UPDATE_CONVERSATION',
+  
   SetStatusMessage: 'SET_STATUS_MESSAGE',
   UpdateConversationItem: 'UPDATE_CONVERSATION_ITEM',
   UpdatePresence: 'UPDATE_USER_PRESENCE',
   AppendConversation: 'APPEND_CONVERSATION',
 
-  SetCurrentPage: 'SET_CURRENT_PAGE'
-};
+  SetCurrentPage: 'SET_CURRENT_PAGE',
+  SetSubscriptionState: 'SET_SUBSCRIPTION_STATE',
+  ClearSubscriptionState: 'CLEAR_SUBSCRIPTION_STATE'
+}
 
-export default actionTypes;
+export default actionTypes

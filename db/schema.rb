@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2020_02_16_213336) do
+ActiveRecord::Schema.define(version: 2020_07_30_031419) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -67,6 +67,7 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
     t.bigint "invited_by_id"
     t.integer "invitations_count", default: 0
     t.boolean "bot"
+    t.boolean "available"
     t.index ["confirmation_token"], name: "index_agents_on_confirmation_token", unique: true
     t.index ["email"], name: "index_agents_on_email", unique: true
     t.index ["invitation_token"], name: "index_agents_on_invitation_token", unique: true
@@ -85,8 +86,10 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
     t.string "state"
     t.datetime "created_at", precision: 6, null: false
     t.datetime "updated_at", precision: 6, null: false
+    t.string "external_id"
     t.index ["app_id"], name: "index_app_package_integrations_on_app_id"
     t.index ["app_package_id"], name: "index_app_package_integrations_on_app_package_id"
+    t.index ["external_id"], name: "index_app_package_integrations_on_external_id"
   end
 
   create_table "app_packages", force: :cascade do |t|
@@ -160,6 +163,7 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
     t.jsonb "preferences", default: "{}", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "owner_id"
     t.index ["key"], name: "index_apps_on_key"
     t.index ["preferences"], name: "index_apps_on_preferences", using: :gin
   end
@@ -297,6 +301,7 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
     t.datetime "created_at", precision: 6, null: false
     t.datetime "updated_at", precision: 6, null: false
     t.string "type"
+    t.integer "position"
     t.index ["app_id"], name: "index_bot_tasks_on_app_id"
     t.index ["state"], name: "index_bot_tasks_on_state"
     t.index ["type"], name: "index_bot_tasks_on_type"
@@ -509,7 +514,7 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
 
   create_table "oauth_access_grants", force: :cascade do |t|
     t.bigint "resource_owner_id", null: false
-    t.bigint "application_id", null: false
+    t.bigint "application_id"
     t.string "token", null: false
     t.integer "expires_in", null: false
     t.text "redirect_uri", null: false
@@ -523,7 +528,7 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
 
   create_table "oauth_access_tokens", force: :cascade do |t|
     t.bigint "resource_owner_id"
-    t.bigint "application_id", null: false
+    t.bigint "application_id"
     t.string "token", null: false
     t.string "refresh_token"
     t.integer "expires_in"
@@ -541,11 +546,14 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
     t.string "name", null: false
     t.string "uid", null: false
     t.string "secret", null: false
-    t.text "redirect_uri", null: false
+    t.string "redirect_uri"
     t.string "scopes", default: "", null: false
     t.boolean "confidential", default: true, null: false
     t.datetime "created_at", precision: 6, null: false
     t.datetime "updated_at", precision: 6, null: false
+    t.integer "owner_id"
+    t.string "owner_type"
+    t.index ["owner_id", "owner_type"], name: "index_oauth_applications_on_owner_id_and_owner_type"
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
   end
 
@@ -580,6 +588,28 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["status_id"], name: "index_preview_cards_on_status_id", unique: true
+  end
+
+  create_table "quick_replies", force: :cascade do |t|
+    t.string "title"
+    t.text "content"
+    t.bigint "app_id", null: false
+    t.datetime "created_at", precision: 6, null: false
+    t.datetime "updated_at", precision: 6, null: false
+    t.index ["app_id"], name: "index_quick_replies_on_app_id"
+  end
+
+  create_table "quick_replies_translations", force: :cascade do |t|
+  end
+
+  create_table "quick_reply_translations", force: :cascade do |t|
+    t.bigint "quick_reply_id", null: false
+    t.string "locale", null: false
+    t.datetime "created_at", precision: 6, null: false
+    t.datetime "updated_at", precision: 6, null: false
+    t.text "content"
+    t.index ["locale"], name: "index_quick_reply_translations_on_locale"
+    t.index ["quick_reply_id"], name: "index_quick_reply_translations_on_quick_reply_id"
   end
 
   create_table "roles", force: :cascade do |t|
@@ -667,6 +697,7 @@ ActiveRecord::Schema.define(version: 2020_02_16_213336) do
   add_foreign_key "oauth_access_tokens", "agents", column: "resource_owner_id"
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
   add_foreign_key "outgoing_webhooks", "apps"
+  add_foreign_key "quick_replies", "apps"
   add_foreign_key "roles", "agents"
   add_foreign_key "roles", "apps"
   add_foreign_key "taggings", "tags"

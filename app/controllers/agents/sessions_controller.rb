@@ -22,22 +22,24 @@ class Agents::SessionsController < Devise::SessionsController
     # for credential (aprove)
     # TODO: figure out how can avoid this 
     # like customize /oauth/applications
-    sign_in(resource_name, resource, {store: true})
+    # sign_in(resource_name, resource, {store: true})
 
     if !session[:return_to].blank?
       redirect_to session[:return_to]
       session[:return_to] = nil
     else
       a = Doorkeeper::Application.first
-      client = OAuth2::Client.new(a.uid, a.secret, site: a.redirect_uri)
 
-      access_token =  client.password.get_token(
-        params[:agent][:email], 
-        params[:agent][:password]
+      access_token = Doorkeeper::AccessToken.find_or_create_for(
+        a, resource, "", 1.hour, true
       )
-      
+
       respond_with_navigational(resource, status: :success) do
-        render json: access_token
+        render json: {
+          access_token: access_token.token,
+          refresh_token: access_token.refresh_token,
+          expires_in: access_token.expires_in
+        }
       end
     end
   end

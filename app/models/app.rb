@@ -23,6 +23,11 @@ class App < ApplicationRecord
     custom_fields
     enable_articles_on_widget
     inline_new_conversations
+    tag_list
+    paddle_user_id
+    paddle_subscription_id
+    paddle_subscription_plan_id
+    paddle_subscription_status
   ], coder: JSON
 
   translates :greetings, :intro, :tagline
@@ -35,33 +40,30 @@ class App < ApplicationRecord
   # http://nandovieira.com/using-postgresql-and-jsonb-with-ruby-on-rails
   # App.where('preferences @> ?', {notifications: true}.to_json)
 
-  has_many :app_users
+  has_many :app_users, dependent: :destroy
   has_many :external_profiles, through: :app_users 
-  has_many :bot_tasks
-  has_many :visits, through: :app_users
-
-  has_many :app_package_integrations
+  has_many :bot_tasks, dependent: :destroy
+  has_many :visits, through: :app_users, dependent: :destroy
+  has_many :quick_replies, dependent: :destroy
+  has_many :app_package_integrations, dependent: :destroy
   has_many :app_packages, through: :app_package_integrations
-
   has_one :article_settings, class_name: 'ArticleSetting', dependent: :destroy
-  has_many :articles
-  has_many :article_collections
+  has_many :articles, dependent: :destroy
+  has_many :article_collections, dependent: :destroy
   has_many :sections, through: :article_collections
-
-  has_many :conversations
+  has_many :conversations, dependent: :destroy
   has_many :conversation_parts, through: :conversations, source: :messages
-  has_many :segments
-
-  has_many :roles
+  has_many :segments, dependent: :destroy
+  has_many :roles, dependent: :destroy
   has_many :agents, through: :roles
-  has_many :campaigns
-  has_many :user_auto_messages
-  has_many :tours
-  has_many :messages
-
-  has_many :assignment_rules
-
-  has_many :outgoing_webhooks
+  has_many :campaigns, dependent: :destroy
+  has_many :user_auto_messages, dependent: :destroy
+  has_many :tours, dependent: :destroy
+  has_many :messages, dependent: :destroy
+  has_many :assignment_rules, dependent: :destroy
+  has_many :outgoing_webhooks, dependent: :destroy
+  has_many :oauth_applications, class_name: 'Doorkeeper::Application', as: :owner, dependent: :destroy
+  belongs_to :owner, class_name: "Agent", optional: true #, foreign_key: "owner_id"
 
   has_one_attached :logo
 
@@ -86,43 +88,43 @@ class App < ApplicationRecord
       {
         name: 'name',
         type: 'string',
-        grid: { xs: 12, sm: 12 }
+        grid: { xs: 'w-full', sm: 'w-full' }
       },
 
       {
         name: 'domainUrl',
         type: 'string',
-        grid: { xs: 12, sm: 6 }
+        grid: { xs: 'w-full', sm: 'w-1/2' }
       },
 
       {
         name: 'outgoingEmailDomain',
         type: 'string',
-        grid: { xs: 12, sm: 6 }
+        grid: { xs: 'w-full', sm: 'w-1/2' }
       },
 
       {
         name: 'enable_articles_on_widget',
         type: 'string',
-        grid: { xs: 12, sm: 6 }
+        grid: { xs: 'w-full', sm: 'w-1/2' }
       },
 
       {
         name: 'state',
         type: 'select',
-        grid: { xs: 12, sm: 6 },
+        grid: { xs: 'w-full', sm: 'w-1/2' },
         options: %w[enabled disabled]
       },
 
       { name: 'activeMessenger',
         type: 'bool',
-        grid: { xs: 12, sm: 6 } },
+        grid: { xs: 'w-full', sm: 'w-1/2' } },
 
       {
         name: 'theme',
         type: 'select',
         options: %w[dark light],
-        grid: { xs: 12, sm: 6 }
+        grid: { xs: 'w-full', sm: 'w-1/2' }
       },
 
       {
@@ -130,18 +132,19 @@ class App < ApplicationRecord
         type: 'string',
         maxLength: 16, minLength: 16,
         placeholder: 'leave it blank for no encryption',
-        grid: { xs: 12, sm: 12 }
+        grid: { xs: 'w-full', sm: 'w-full' }
       },
 
       { name: 'tagline',
         type: 'text',
         hint: 'messenger text on botton',
-        grid: { xs: 12, sm: 12 } },
+        grid: { xs: 'w-full', sm: 'w-full' } },
 
-      { name: 'timezone', type: 'timezone',
+      { name: 'timezone', 
+        type: 'timezone',
         options: ActiveSupport::TimeZone.all.map { |o| o.tzinfo.name },
         multiple: false,
-        grid: { xs: 12, sm: 12 } }
+        grid: { xs: 'w-full', sm: 'w-full' } }
 
     ]
   end
@@ -180,12 +183,12 @@ class App < ApplicationRecord
     ap
   end
 
-  def add_agent(attrs, bot: nil)
+  def add_agent(attrs, bot: nil, role_attrs: {})
     email = attrs.delete(:email)
     user = Agent.find_or_initialize_by(email: email)
     # user.skip_confirmation!
     if user.new_record?
-      user.password = Devise.friendly_token[0, 20]
+      user.password = attrs[:password] || Devise.friendly_token[0, 20]
       user.save
     end
 
@@ -197,6 +200,7 @@ class App < ApplicationRecord
     user.save
 
     # role.last_visited_at = Time.now
+    role.assign_attributes(role_attrs)
     role.save
     role
   end
@@ -209,9 +213,15 @@ class App < ApplicationRecord
     add_bot_agent(email: "bot@#{id}-chaskiq", name: 'chaskiq bot')
   end
 
-  def add_admin(user)
-    user.roles.create(app: self, role: 'admin')
-    add_user(email: user.email)
+  def add_admin(attrs)
+    add_agent(
+      {
+        email: attrs[:email],
+        password: attrs[:password]
+      }, 
+      bot: nil, 
+      role_attrs: { access_list: ['manage'] }
+    )
   end
 
   def add_visit(opts = {})
@@ -310,6 +320,14 @@ class App < ApplicationRecord
     rescue StandardError
       nil
     end
+  end
+
+  def searcheable_fields
+    (self.custom_fields || []) + AppUser::ENABLED_SEARCH_FIELDS
+  end
+
+  def searcheable_fields_list
+    searcheable_fields.map{ |o| o["name"] }
   end
 
   private

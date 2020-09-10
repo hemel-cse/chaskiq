@@ -13,11 +13,15 @@
 /db/*.sqlite3
 /db/*.sqlite3-journal
 
+/app/javascripts/old-src
 # Ignore all logfiles and tempfiles.
 /log/*
 /tmp/*
 !/log/.keep
 !/tmp/.keep
+
+/cypress
+/spec/cypress/screenshots
 
 # Ignore uploaded files in development
 /storage/*
@@ -40,3 +44,9 @@ latest.dump
 public/schema.graphql
 cypress/cypress-examples
 cypress/videos
+stats.json
+.DS_Store
+app/javascript/old-src
+.envrc
+
+spec/cypress/videos/**/*

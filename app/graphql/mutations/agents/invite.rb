@@ -10,11 +10,17 @@ module Mutations
       def resolve(app_key:, email:)
         app = current_user.apps.find_by(key: app_key)
 
-        agent = Agent.invite!(email: email) # , name: 'John Doe')
+        authorize! app, to: :invite_user?, with: AppPolicy
 
-        role = app.roles.find_or_initialize_by(agent_id: agent.id)
-        role.save
-        role
+        agent = app.agents.find_by(email: email)
+
+        if agent.blank?
+          agent = Agent.invite!(email: email)
+          role = app.roles.find_or_initialize_by(agent_id: agent.id)
+          role.save
+        else
+          agent.deliver_invitation
+        end
 
         { agent: agent }
       end

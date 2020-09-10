@@ -13,6 +13,8 @@ class Event < ApplicationRecord
     { identifier: :conversation_reopened, name: 'conversations.reopened' },
     { identifier: :conversation_message_added, name: 'conversations.part_added' },
     { identifier: :conversation_message_readed_by_agent, name: 'conversations.agent.read' },
+    { identifier: :first_comment_from_user, name: 'conversation.user.first.comment' },
+    { identifier: :conversation_message_readed_by_agent, name: 'conversations.agent.read' },
     { identifier: :conversation_message_readed_by_user, name: 'conversations.user.read' }
 
     # {identifier: :campaign_viewed, name: "campaign.user.read"},
@@ -28,6 +30,8 @@ class Event < ApplicationRecord
 
     OutgoingWebhookJob.perform_later(event_id: self.id)
 
+    #puts "EL EVENT: #{action}"
+  
     action_event = 'Events::' + action.gsub('.', '_').classify
     klass = begin
               action_event.constantize
@@ -36,19 +40,17 @@ class Event < ApplicationRecord
             end
 
     if klass.blank?
-      puts "no trigger hook for #{action}"
+      #puts "no trigger hook for #{action}"
       return
     end
 
-    puts "trigger hook on #{action}"
+    #puts "trigger hook on #{action}"
     klass.perform(self)
-
   end
 
   def self.action_for(name)
     ev = self::EVENT_CONSTANTS.find { |o| o[:identifier] == name }.try(:[], :name)
     raise "event \"#{name}\" constant missing" if ev.blank?
-
     ev
   end
 end

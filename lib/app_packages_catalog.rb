@@ -13,7 +13,7 @@ class AppPackagesCatalog
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ]
       },
@@ -28,7 +28,7 @@ class AppPackagesCatalog
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ]
       },
@@ -43,12 +43,12 @@ class AppPackagesCatalog
           {
             name: 'project_id',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'credentials',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ]
       },
@@ -63,12 +63,12 @@ class AppPackagesCatalog
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'api_key',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ]
       },
@@ -83,38 +83,34 @@ class AppPackagesCatalog
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
         ]
       },
       {
         name: 'Slack',
-        tag_list: ['conversations.added', 'email_changed'],
+        tag_list: ['email_changed', 'conversation.user.first.comment'],
         state: 'enabled',
         description: 'Slack channel integration',
         icon: 'https://logo.clearbit.com/slack.com',
-        definitions: [
+        credentials: (ENV['SLACK_CLIENT_ID'] && ENV['SLACK_CLIENT_SECRET']) ? {
+          api_key: ENV['SLACK_CLIENT_ID'],
+          api_secret: ENV['SLACK_CLIENT_SECRET']
+        } : {},
+        definitions: (!ENV['SLACK_CLIENT_ID'] && !ENV['SLACK_CLIENT_SECRET']) ? [
           {
             name: 'api_key',
+            label: 'App ID',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'api_secret',
+            label: 'Client Secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
-          },
-          {
-            name: 'access_token',
-            type: 'string',
-            grid: { xs: 12, sm: 12 }
-          },
-          {
-            name: 'access_token_secret',
-            type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
-        ]
+        ] : []
       },
 
       {
@@ -127,24 +123,24 @@ class AppPackagesCatalog
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'api_key',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
 
           {
             name: 'access_token',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
 
           {
             name: 'access_token_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ]
       },
@@ -160,17 +156,17 @@ class AppPackagesCatalog
           {
             name: 'api_key',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'access_token',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ],
         editor_definitions: {
@@ -204,7 +200,7 @@ class AppPackagesCatalog
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ],
         editor_definitions: {
@@ -236,17 +232,17 @@ class AppPackagesCatalog
           {
             name: 'api_key',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'report_id',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
         ]
       },
@@ -259,14 +255,23 @@ class AppPackagesCatalog
         state: 'enabled',
         definitions: [
           {
-            name: 'api_key',
+            name: 'user_id',
+            label: 'Phone',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            hint: 'The Twillio Whatsapp number (format: +14155231223)',
+            grid: { xs: 'w-full', sm: 'w-full' }
+          },
+          {
+            name: 'api_key',
+            label: 'Account SID',
+            type: 'string',
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'api_secret',
+            label: 'Auth Token', 
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ]
       },
@@ -281,17 +286,17 @@ class AppPackagesCatalog
           {
             name: 'api_key',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'api_secret',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           },
           {
             name: 'verify_token',
             type: 'string',
-            grid: { xs: 12, sm: 12 }
+            grid: { xs: 'w-full', sm: 'w-full' }
           }
         ]
       }
@@ -307,5 +312,12 @@ class AppPackagesCatalog
     data = packages.find{|o| o[:name].downcase === kind.downcase}
     pkg = AppPackage.find_or_create_by(name: data[:name])
     pkg.update(data) unless pkg.blank?
+  end
+
+  def self.update_all
+    packages.each do |pkg|
+      package = AppPackage.find_or_create_by(name: pkg[:name])
+      package.update(pkg)
+    end
   end
 end

@@ -1,375 +1,643 @@
-import React, {Component, useState, useEffect} from 'react'
-import FieldRenderer from '../../shared/FormFields'
+import React, { useState, useEffect } from 'react'
 
-import Grid from '@material-ui/core/Grid'
-import Button from '@material-ui/core/Button'
-import Tabs from '@material-ui/core/Tabs'
-import Tab from '@material-ui/core/Tab'
-import Typography from '@material-ui/core/Typography'
-import Checkbox from '@material-ui/core/Checkbox'
-import Box from '@material-ui/core/Box'
-import FormControlLabel from '@material-ui/core/FormControlLabel'
-import FormControl from '@material-ui/core/FormControl'
-import FormGroup from '@material-ui/core/FormGroup'
-import Radio from '@material-ui/core/Radio'
-import RadioGroup from '@material-ui/core/RadioGroup'
-import FormLabel from '@material-ui/core/FormLabel'
-import Divider from '@material-ui/core/Divider'
-import InputLabel from '@material-ui/core/InputLabel'
-import Select from '@material-ui/core/Select'
-import MenuItem from '@material-ui/core/MenuItem'
+import Button from '../../components/Button'
+import Tabs from '../../components/Tabs'
 
-import {toSnakeCase} from '../../shared/caseConverter'
-import serialize from 'form-serialize'
-
-import ContentHeader from '../../components/ContentHeader'
+import ContentHeader from '../../components/PageHeader'
 import Content from '../../components/Content'
-
+import Input from '../../components/forms/Input'
 import graphql from '../../graphql/client'
-import {AGENTS} from '../../graphql/queries'
-import {UPDATE_APP} from '../../graphql/mutations'
+import defaultFields from '../../shared/defaultFields'
 
-import { 
-  updateApp
-} from '../../actions/app'
+import { InlineFilterDialog } from '../../components/segmentManager'
+import SegmentItemButton from '../../components/segmentManager/itemButton'
+
+import { AGENTS, BOT_TASKS } from '../../graphql/queries'
+
+import { updateApp } from '../../actions/app'
 import { setCurrentPage } from '../../actions/navigation'
+import {PlusIcon, DeleteIcon} from '../../components/icons'
+import I18n from '../../shared/FakeI18n'
 
-const SettingsForm = ({app, data, errors, dispatch}) => {
-
+const SettingsForm = ({ app, data, errors, dispatch }) => {
   const [tabValue, setTabValue] = useState(0)
   const [state, setState] = useState({})
   const [agents, setAgents] = useState([])
+  const [tasks, setTasks] = useState([])
 
-  useEffect(()=>{
-    dispatch(setCurrentPage("botSettings"))
+  useEffect(() => {
+    dispatch(setCurrentPage('botSettings'))
   }, [])
 
-  function getAgents(){
-    graphql(AGENTS, {appKey: app.key }, {
-      success: (data)=>{
-        setAgents(data.app.agents)
-      }, 
-      error: (error)=>{
+  function getAgents () {
+    graphql(
+      AGENTS,
+      { appKey: app.key },
+      {
+        success: (data) => {
+          setAgents(data.app.agents)
+        },
+        error: (error) => {}
       }
-    })
+    )
   }
 
-  let formRef 
-
-  function tabsContent(){
-    return <Tabs value={tabValue} 
-              onChange={handleTabChange}
-              textColor="inherit">
-              <Tab textColor="inherit" label="For Leads" />
-              <Tab textColor="inherit" label="For Users" />
-            </Tabs>
+  function getTasks (mode) {
+    graphql(
+      BOT_TASKS,
+      { appKey: app.key, mode: mode },
+      {
+        success: (data) => {
+          setTasks(data.app.botTasks)
+        },
+        error: (error) => {}
+      }
+    )
   }
 
-  function submit(params){
+  const getTasksFor = (name) => () => {
+    getTasks(name)
+  }
+
+  let formRef
+
+  function tabsContent () {
+    return (
+      <Tabs
+        value={tabValue}
+        onChange={handleTabChange}
+        textColor="inherit"
+        tabs={[
+          {
+            label: I18n.t('task_bots.settings.leads.tab'),
+            content: (
+              <LeadsSettings
+                app={app}
+                updateData={updateState}
+                agents={agents}
+                getAgents={getAgents}
+                tasks={tasks}
+                getTasks={getTasksFor('leads')}
+                submit={submit}
+                namespace={'lead_tasks_settings'}
+              />
+            )
+          },
+          {
+            label: I18n.t('task_bots.settings.users.tab'),
+            content: (
+              <UsersSettings
+                app={app}
+                updateData={updateState}
+                agents={agents}
+                getAgents={getAgents}
+                tasks={tasks}
+                getTasks={getTasksFor('users')}
+                submit={submit}
+                namespace={'user_tasks_settings'}
+              />
+            )
+          }
+        ]}
+      ></Tabs>
+    )
+  }
+
+  function submit (params) {
     dispatch(updateApp(params))
   }
 
-  function handleTabChange(e, i){
+  function handleTabChange (e, i) {
     setTabValue(i)
   }
 
-  function updateState(newData){
+  function updateState (newData) {
     setState(Object.assign({}, data, newData))
   }
 
-  const renderTabcontent = ()=>{
-    switch (tabValue){
-      case 0:
-        return <LeadsSettings 
-                  app={app}
-                  updateData={updateState} 
-                  agents={agents} 
-                  getAgents={getAgents}
-                  submit={submit}
-                  namespace={"lead_tasks_settings"}
-                />
-      case 1:
-        return <UsersSettings 
-                  app={app}
-                  updateData={updateState}
-                  agents={agents} 
-                  getAgents={getAgents}
-                  submit={submit}
-                  namespace={"user_tasks_settings"}
-              />
-    }
-  }
-
   return (
-
     <div>
-      <ContentHeader 
-        title={ "Bot default settings" }
-        items={ []
-            }
-        tabsContent={tabsContent()}
-      />
-
       <Content>
-        {/*JSON.stringify(state)*/}
-        {renderTabcontent()}
+        <ContentHeader title={
+          I18n.t('task_bots.title')
+        } items={[]} />
+        {tabsContent()}
       </Content>
     </div>
   )
 }
 
-function UsersSettings({app, updateData, namespace, submit}){
-  const [state, setState] = React.useState(app.userTasksSettings ||{});
+function UsersSettings ({
+  app,
+  updateData,
+  namespace,
+  submit,
+  tasks,
+  getTasks
+}) {
+  const [state, setState] = React.useState(app.userTasksSettings || {})
 
-  useEffect(()=>{
-    updateData({users: state})
+  useEffect(() => {
+    updateData({ users: state })
   }, [state])
 
-  const handleChange = name => event => {
-    setState({ ...state, [name]: event.target.checked });
-  };
+  /*
+  useEffect(() => {
+    if (!state.override_with_task) setState({ ...state, trigger: null })
+  }, [state.override_with_task])
+  */
 
-  function submitData(){
-    const data = {[namespace]: state}
+  const handleChange = (name) => (event) => {
+    setState({ ...state, [name]: event.target.checked })
+  }
+
+  const setValue = (name, value) => {
+    setState({ ...state, [name]: value })
+  }
+
+  function submitData () {
+    const data = { [namespace]: state }
     submit(data)
   }
 
   return (
-    <Grid container direction={"column"}>
+    <div>
+      <div className="py-4">
+        <p className="text-lg leading-6 font-medium text-gray-900 pb-4">
+          {I18n.t('task_bots.settings.users.start_conversation')}
+        </p>
 
-      <Grid item>
-        <Typography variant={"h4"}>
-          When users start a conversation
-        </Typography>
-
-        <FormControlLabel
-          control={
-            <Checkbox checked={state.delay} 
-            onChange={handleChange('delay')} value="delay" />
-          }
-          label="Leave a 2 minute delay before triggering Task Bots during office hours"
+        <Input
+          type="checkbox"
+          label={I18n.t('task_bots.settings.users.delay')}
+          checked={state.delay}
+          onChange={handleChange('delay')}
+          value="delay"
         />
-      </Grid>
 
-      <Grid item>
-        <Button 
-          color={"primary"}
-          variant={"contained"}
-          onClick={submitData}>
-          save
+        <Input
+          type="checkbox"
+          checked={state.override_with_task}
+          onChange={handleChange('override_with_task')}
+          value={state.override_with_task}
+          label={ I18n.t('task_bots.settings.users.override.label') }
+          hint={ I18n.t('task_bots.settings.users.override.hint') }
+        />
+
+        {
+          state.override_with_task &&
+          <div className="pl-1 py-4">
+            <TasksList
+              app={app}
+              tasks={tasks}
+              getTasks={getTasks}
+              setValue={setValue}
+              value={state}
+            />
+          </div>
+        }
+      </div>
+
+      <div className="py-4">
+        <Button size={'medium'}
+          variant={'contained'} onClick={submitData}>
+          {I18n.t('common.save')}
         </Button>
-
-      </Grid>
-
-    </Grid>
+      </div>
+    </div>
   )
 }
 
-function LeadsSettings({app, updateData, agents, getAgents, submit, namespace}){
+function LeadsSettings ({
+  app,
+  updateData,
+  agents,
+  getAgents,
+  submit,
+  namespace,
+  tasks,
+  getTasks
+}) {
+  const [state, setState] = React.useState(app.leadTasksSettings || {})
 
-  const [state, setState] = React.useState(app.leadTasksSettings || {} );
-
-  useEffect(()=>{
-    updateData({leads: state})
+  useEffect(() => {
+    updateData({ leads: state })
   }, [state])
 
-  const handleChange = name => event => {
+  /*
+  useEffect(() => {
+    if (!state.override_with_task) setState({ ...state, trigger: null })
+  }, [state.override_with_task])
+  */
+
+  const handleChange = (name) => (event) => {
     setValue(name, event.target.checked)
-  };
-
-  function handleRadioChange(event) {
-    setValue(event.target.name, event.target.value);
   }
 
-  const setValue = (name, value)=>{
-    setState({ ...state, [name]: value });
+  function handleRadioChange (event) {
+    const name = event.target.name
+    setState({ ...state, [name]: event.target.value })
   }
 
-  function submitData(){
-    const data = {[namespace]: state}
+  const setValue = (name, value) => {
+    setState({ ...state, [name]: value })
+  }
+
+  function submitData () {
+    const data = { [namespace]: state }
     submit(data)
   }
 
   return (
-    <Grid container>
+    <div>
+      <div className="py-4">
+        <p className="text-lg leading-6 font-medium text-gray-900 pb-4">
+          {I18n.t('task_bots.settings.leads.start_conversation')}
+        </p>
 
-      <Grid item>
-        <Typography variant={"h4"}>
-          When leads start a conversation
-        </Typography>
-
-        <Grid container direction="column">
-
-          <FormControlLabel
-            control={
-              <Checkbox 
-                checked={state.delay} 
-                onChange={handleChange('delay')} 
-                value={state.delay} 
-              />
-            }
-            label="Leave a 2 minute delay before triggering Task Bots during office hours"
+        <div>
+          <Input
+            type="checkbox"
+            checked={state.delay}
+            onChange={handleChange('delay')}
+            value={state.delay}
+            label={I18n.t('task_bots.settings.leads.delay')}
           />
 
-          <FormControlLabel
-            control={
-              <Checkbox 
-                checked={state.share_typical_time} 
-                onChange={handleChange('share_typical_time')} 
-                value={state.share_typical_time} 
-              />
-            }
-            label="Share your typical reply time"
+          <Input
+            type="checkbox"
+            checked={state.share_typical_time}
+            onChange={handleChange('share_typical_time')}
+            value={state.share_typical_time}
+            label={I18n.t('task_bots.settings.leads.share_time')}
           />
 
-        </Grid>
+          <Input
+            type="checkbox"
+            checked={ state.override_with_task }
+            onChange={ handleChange('override_with_task') }
+            value={ state.override_with_task }
+            label={ I18n.t('task_bots.settings.leads.override.label') }
+            helperText={ I18n.t('task_bots.settings.leads.override.hint') }
+          />
 
-        <Divider/>
-        
-        <Typography variant={"h5"}>
-          Route existing customers to support
-        </Typography>
+          {
+            state.override_with_task &&
+            <div className="pl-1 py-4">
+              <TasksList
+                app={app}
+                tasks={tasks}
+                getTasks={getTasks}
+                setValue={setValue}
+                value={state}
+              />
+            </div>
+          }
 
-        <Typography variant={"body1"}>
-          Route leads to the right people by asking if they are an existing customer when they start a new conversation.      
-        </Typography>
+        </div>
 
-        <FormControl component="fieldset" margin={"normal"}>
-          
-          <FormLabel component="legend">
-            What do you want to do when they choose "Yes, I'm a customer"?
-          </FormLabel>
+        <hr />
 
-          <RadioGroup aria-label="position" 
-            name="routing" 
-            value={state.routing} 
-            onChange={handleRadioChange} 
-            >
+        <p className="text-lg leading-6 font-medium text-gray-900 py-4">
+          {I18n.t('task_bots.settings.leads.route')}
+        </p>
 
-            <Box pt={2} >
-              <Grid container direction={"row"}>
+        <p className="max-w-xl text-sm leading-5 text-gray-500 mb-4">
+          {I18n.t('task_bots.settings.leads.route_desc')}
+        </p>
 
-                <FormControlLabel
-                  value="assign"
-                  control={<Radio color="primary" />}
-                  label="Assign the conversation"
-                  labelPlacement="end"
-                />
+        <h2 className="font-bold mb-2">
+          {I18n.t('task_bots.settings.leads.route_costumer')}
+        </h2>
 
-                {
-                  state.routing === "assign" && 
-                  
-                  <AgentSelector 
-                    agents={agents} 
-                    getAgents={getAgents}
-                    setValue={setValue}
-                    value={state.assignee}
-                  />
-                }
-              
-              </Grid>
-            </Box>
-            
+        <div className="flex items-center">
+          <Input
+            type="radio"
+            name="routing"
+            // value={state.routing}
+            onChange={handleRadioChange}
+            value="assign"
+            defaultChecked={state.routing === 'assign'}
+            label={I18n.t('task_bots.settings.leads.assign')}
+          ></Input>
 
+          <div className="w-1/4 pl-5">
+            {state.routing === 'assign' && (
+              <AgentSelector
+                agents={agents}
+                getAgents={getAgents}
+                setValue={setValue}
+                value={state.assignee}
+              />
+            )}
+          </div>
+        </div>
 
+        <Input
+          name="routing"
+          type="radio"
+          value="close"
+          defaultChecked={state.routing === 'close'}
+          // value={state.routing}
+          onChange={handleRadioChange}
+          label={I18n.t('task_bots.settings.leads.close')}
+        />
 
-            <FormControlLabel
-              value="close"
-              control={<Radio color="primary" />}
-              label="Close the conversation"
-              labelPlacement="end"
-            />
-          </RadioGroup>
-        </FormControl>
+        <hr />
 
-        <Divider/>
+        <p className="text-lg leading-6 font-medium text-gray-900 py-4">
+          {I18n.t('task_bots.settings.leads.ask')}
+        </p>
 
-        <Typography variant={"h5"}>
-          Ask for contact details
-        </Typography>
+        <p className="max-w-xl text-sm leading-5 text-gray-500 mb-4">
+          {I18n.t('task_bots.settings.leads.ask_hint')}
+        </p>
 
-        <Typography variant={"body1"}>
-          If we don’t already have their contact details, 
-          Operator will suggest that customers leave their email 
-          address or their phone number to get notified whenever 
-          you reply.
-        </Typography>
+        <Input
+          type="radio"
+          name="email_requirement"
+          defaultChecked={state.email_requirement === 'never'}
+          value={'never'}
+          onChange={handleRadioChange}
+          label={I18n.t('task_bots.settings.leads.dont_ask_email')}
+        />
 
-        <FormControl>
-          <RadioGroup aria-label="position" 
-            name="email_requirement" 
-            value={state.email_requirement} 
-            onChange={handleRadioChange} 
-            >
-            <FormControlLabel
-              value="email_only"
-              control={<Radio color="primary" />}
-              label="Ask for email only"
-              labelPlacement="end"
-            />
-            <FormControlLabel
-              value="email_or_phone"
-              control={<Radio color="primary" />}
-              label="Ask for email or mobile number"
-              labelPlacement="end"
-            />
-          </RadioGroup>
-        </FormControl>
-      </Grid>
+        <Input
+          type="radio"
+          name="email_requirement"
+          // value={state.email_requirement}
+          onChange={handleRadioChange}
+          defaultChecked={state.email_requirement === 'email_or_phone'}
+          label={I18n.t('task_bots.settings.leads.ask_email_phone')}
+          value="email_or_phone"
+          labelPlacement="end"
+        />
 
-      <Grid item>
-        <Button 
-          color={"primary"}
-          variant={"contained"}
+        <Input
+          type="radio"
+          name="email_requirement"
+          // value={state.email_requirement}
+          onChange={handleRadioChange}
+          value="email_only"
+          defaultChecked={state.email_requirement === 'email_only'}
+          label={I18n.t('task_bots.settings.leads.email_only')}
+        />
+      </div>
+
+      <div className="py-4">
+        <Button size={'medium'}
+          variant={'contained'}
           onClick={submitData}>
-          save
+          {I18n.t('common.save')}
         </Button>
-      </Grid>
-    </Grid>
+      </div>
+    </div>
   )
 }
 
-function AgentSelector({agents, getAgents, setValue, value }){
+function AgentSelector ({ agents, getAgents, setValue, value }) {
   const [selected, setSelected] = React.useState(value)
 
   useEffect(() => {
     getAgents()
   }, [])
 
-  useEffect(()=>{
-    console.log("assignee", selected)
-    setValue("assignee", selected)
+  useEffect(() => {
+    setValue('assignee', selected)
   }, [selected])
 
-  function handleChange(e){
-    setSelected(e.target.value)
+  function handleChange (e) {
+    setSelected(e.value)
+  }
+
+  const selectedAgent = agents.find((o) => o.id === selected)
+  let defaultValue = null
+  if (selectedAgent) {
+    defaultValue = { label: selectedAgent.email, value: selectedAgent.id }
   }
 
   return (
     <div>
-      <FormControl>
-        <InputLabel htmlFor="agent">agent</InputLabel>
-        <Select
-          value={selected}
-          onChange={handleChange}
-          inputProps={{
-            name: 'agent',
-            id: 'agent',
-          }}
-        >
-
-          {
-            agents.map((o)=>(
-              <MenuItem key={`agent-${o.id}`} value={o.id}>
-                {o.email}
-              </MenuItem>
-            ))
-          }
-
-        </Select>
-      </FormControl>
+      <Input
+        type="select"
+        value={defaultValue}
+        onChange={handleChange}
+        // defaultValue={selected}
+        defaultValue={defaultValue}
+        name={'agent'}
+        id={'agent'}
+        data={{}}
+        options={agents.map((o) => ({ label: o.email, value: o.id }))}
+      ></Input>
     </div>
   )
+}
+
+function TasksList ({ app, tasks, getTasks, setValue, value }) {
+  const [items, setItems] = React.useState(value.task_rules || [])
+
+  useEffect(() => {
+    getTasks()
+  }, [])
+
+  useEffect(()=> {
+    setValue('task_rules', items)
+  }, [JSON.stringify(items)])
+
+  function addItem (item) {
+    setItems(items.concat(item))
+  }
+
+  function updateItem (name, item, i) {
+    setItems(items.map((o, index) => index !== i
+      ? o : { ...o, [name]: item }
+    )
+    )
+  }
+
+  function addEmptyItem () {
+    addItem({})
+  }
+
+  function deleteItem (i) {
+    setItems(items.filter((item, index) => index !== i))
+  }
+
+  return (
+    <div>
+      {
+        items.map((o, i) => (
+          <TaskSelector
+            // key={Math.random()}
+            app={app}
+            tasks={tasks}
+            item={o}
+            index={i}
+            deleteRule={deleteItem}
+            updateRule={updateItem}
+          />
+        ))
+      }
+
+      <Button 
+        variant="outlined"
+        size="xs" 
+        onClick={addEmptyItem}>
+        <PlusIcon/> Add rule
+      </Button>
+
+    </div>
+  )
+}
+
+function TaskSelector ({
+  app,
+  tasks,
+  item,
+  index,
+  value,
+  deleteRule,
+  updateRule
+}) {
+  
+  const [selected, setSelected] = React.useState(item.trigger)
+
+  useEffect(() => {
+    // setValue(selected, index)
+    updateRule('trigger', selected, index)
+  }, [selected])
+
+  function handleChange (e) {
+    setSelected(e.value)
+  }
+
+  const selectedTask = tasks.find((o) => o.id === selected)
+  let defaultValue = null
+  if (selectedTask) {
+    defaultValue = { label: selectedTask.title, value: selectedTask.id }
+  }
+
+  const options = [{ label: 'none', value: null }].concat(
+    tasks.map((o) => ({ label: o.title, value: o.id }))
+  )
+
+  return (
+    <div className="w-3/4 border rounded-md p-3 mb-2">
+
+      <div className="flex justify-between items-center">
+
+        <div className="w-3/4">
+          <RuleSelector
+            data={ item.predicates || [] }
+            app={app}
+            update={(item) => updateRule('predicates', item, index) }
+          />
+
+          <div className="pt-2">
+            <Input
+              type="select"
+              label="Task bot"
+              value={defaultValue}
+              onChange={handleChange}
+              defaultValue={defaultValue}
+              name={'trigger'}
+              id={'trigger'}
+              data={{}}
+              options={options}
+            />
+          </div>
+        </div>
+
+        <Button 
+          variant='icon'
+          size="small"
+          onClick={() => deleteRule(index)}>
+          <DeleteIcon/>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function RuleSelector ({ app, update, data }) {
+  const [predicates, setPredicates] = React.useState(data)
+
+  React.useEffect(() => {
+    update(predicates)
+  }, [predicates])
+
+  function updatePredicates (data) {
+    setPredicates(data)
+  }
+
+  function deletePredicate (data) {
+    setPredicates(data)
+  }
+
+  function addPredicate (data) {
+    const pendingPredicate = {
+      attribute: data.name,
+      comparison: null,
+      type: data.type,
+      value: data.value
+    }
+    setPredicates(predicates.concat(pendingPredicate))
+  }
+
+  function displayName (o) {
+    return o.attribute.split('_').join(' ')
+  }
+
+  function getTextForPredicate (o) {
+    if (o.type === 'match') {
+      return `Match ${o.value === 'and' ? 'all' : 'any'} criteria`
+    } else {
+      return `${displayName(o)} ${o.comparison ? o.comparison : ''} ${
+        o.value ? o.value : ''
+      }`
+    }
+  }
+
+  return <div
+    style={{
+      display: 'flex',
+      flexWrap: 'wrap'
+    }}>
+    {
+      predicates.map((o, i) => {
+        return <div 
+          className="mr-2"
+          key={i}>
+          <SegmentItemButton
+            key={i}
+            index={i}
+            predicate={o}
+            predicates={predicates}
+            open={!o.comparison}
+            // updater={updater}
+            appearance={o.comparison ? 'primary' : 'default'}
+            text={getTextForPredicate(o)}
+            updatePredicate={updatePredicates}
+            // predicateCallback={(jwtToken) => {
+            //  debugger
+            // }}
+            deletePredicate={(items) => {
+              deletePredicate(items)
+            }}
+          />
+
+        </div>
+      })
+    }
+
+    <InlineFilterDialog
+      app={app}
+      fields={defaultFields}
+      addPredicate={(predicate) => {
+        addPredicate(predicate)
+      }}
+    />
+  </div>
 }
 
 export default SettingsForm

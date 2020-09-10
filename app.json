@@ -19,6 +19,14 @@
     "postdeploy": "bundle exec rake db:schema:load && bundle exec rake db:seed"
   },
   "env": {
+    "ADMIN_EMAIL": {
+      "description": "An admin email to be generated on db:seed task",
+      "value": ""
+    },
+    "ADMIN_PASSWORD": {
+      "description": "An admin passwod to be generated on db:seed task",
+      "generator": "secret"
+    },
     "SECRET_TOKEN": {
       "description": "A secret key for verifying the integrity of signed cookies.",
       "generator": "secret"
@@ -32,15 +40,15 @@
       "value": "production"
     },
     "HOST": {
-      "description": "App's internet entry point ie:. https://domain.com",
+      "description": "App's internet entry point ie:. https://myapp.herokuapp.com",
       "value": ""
     },
     "WS": {
-      "description": "App's websocket server, wss:://domain.com/cable",
+      "description": "App's websocket server, wss://myapp.herokuapp.com/cable",
       "value": ""
     },
     "ASSET_HOST": {
-      "description": "App assets's internet entry point ie:. https://domain.com/",
+      "description": "App assets's internet entry point ie:. https://myapp.herokuapp.com",
       "value": ""
     },
     "SNS_CONFIGURATION_SET": {
@@ -93,7 +101,7 @@
     {
       "plan": "heroku-postgresql",
       "options": {
-        "version": "9.5"
+        "version": "11"
       }
     }
   ],
